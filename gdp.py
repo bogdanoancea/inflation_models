@@ -78,21 +78,20 @@ def create_model(optimizer='adam', lstm_neurons=50, activation='relu', recurrent
     return model
 
 # Keras model with SciKeras wrapper
-model = KerasRegressor(model=create_model, epochs=25, batch_size=1, verbose=2)
+model = KerasRegressor(model=create_model, verbose=2)
 
 # Hyperparameters to be optimized
 param_grid = {
-    'model__optimizer': ['adam', 'SGD', 'rmsprop'],      # Note the prefix "model__"
-    'model__lstm_neurons': [100, 200, 500, 1000, 1500],         # Note the prefix "model__"
-    'model__activation': ['relu', 'tanh', 'linear'],
-    'model__recurrent_dropout' : [0.1, 0.15, 0.2, 0.25],   # Note the prefix "model__"
-    'model__kernel_regularizer' : [regularizers.l2(0.001), regularizers.l2(0.005), regularizers.l2(0.01), regularizers.l2(0.02)],
-    'batch_size': [1,2,4,8],
-    'epochs': [10,50,100,200,500,1000]
+    'model__optimizer': ['adam', 'rmsprop'],      # Note the prefix "model__"
+    'model__lstm_neurons': [100, 500, 1500],         # Note the prefix "model__"
+    'model__recurrent_dropout' : [0.0, 0.1, 0.2],   # Note the prefix "model__"
+    'model__kernel_regularizer' : [regularizers.l2(0.0),  regularizers.l2(0.01), regularizers.l2(0.02)],
+    'batch_size': [1,4,8],
+    'epochs': [100,200,500]
 }
 
 # GridSearchCV
-tscv = TimeSeriesSplit(n_splits=10)
+tscv = TimeSeriesSplit(n_splits=3)
 
 grid = GridSearchCV(estimator=model, param_grid=param_grid, scoring='neg_mean_squared_error', cv=tscv, verbose=2, n_jobs= -1)
 grid_result = grid.fit(X, y)
