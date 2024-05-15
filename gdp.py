@@ -103,7 +103,9 @@ print("Best: %f using %s" % (grid_result.best_score_, grid_result.best_params_))
 
 # define model
 model = grid_result.best_estimator_
-history = model.fit(X, y, epochs=grid_result.best_params_['epochs'], verbose=2, shuffle = False, grid_result.best_params_['batch_size'], metrics=['mape', 'mae'])
+model.model_.save("best_model.keras")
+model = keras.models.load_model('best_model.keras')
+history = model.fit(X, y, epochs=grid_result.best_params_['epochs'], verbose=2, shuffle = False, batch_size=grid_result.best_params_['batch_size'], metrics=['mape', 'mae'])
 
 plt.plot(history.history_['mse'])
 plt.plot(history.history_['mean_absolute_percentage_error'])
