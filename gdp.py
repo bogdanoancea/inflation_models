@@ -59,14 +59,7 @@ for i in range(len(X)):
 	print(X[i], y[i])
 
 n_features = X.shape[2]
-# define model
-model = Sequential()
-model.add(LSTM(1500, activation='relu', return_sequences=True, input_shape=(n_steps_in, n_features)))
-model.add(LSTM(1500, activation='relu', recurrent_dropout=0.1))
-model.add(Dense(n_steps_out))
-model.compile(optimizer='adam', loss='mse',  metrics=['mae', 'mape', 'mse'])
-# fit model
-history = model.fit(X, y, epochs=250, verbose=1, shuffle = False)
+
 
 # demonstrate prediction
 def create_model(optimizer='adam', lstm_neurons=50, activation='relu', recurrent_dropout = 0.1, kernel_regularizer = regularizers.l2(0.01)):
@@ -74,35 +67,47 @@ def create_model(optimizer='adam', lstm_neurons=50, activation='relu', recurrent
     model.add(LSTM(lstm_neurons, activation=activation, return_sequences=True, input_shape=(n_steps_in, n_features)))
     model.add(LSTM(lstm_neurons, activation=activation, recurrent_dropout=recurrent_dropout))
     model.add(Dense(n_steps_out, kernel_regularizer=kernel_regularizer))
-    model.compile(optimizer=optimizer, loss='mse', metrics=['mae', 'mape', 'mse'])
+    model.compile(optimizer=optimizer, loss='mse', metrics=['mae', 'mape'])
     return model
 
 # Keras model with SciKeras wrapper
-model = KerasRegressor(model=create_model, verbose=2)
+model = KerasRegressor(model=create_model, shuffle=False, verbose=2)
 
 # Hyperparameters to be optimized
 param_grid = {
-    'model__optimizer': ['adam', 'rmsprop'],      # Note the prefix "model__"
-    'model__lstm_neurons': [100, 500, 1500],         # Note the prefix "model__"
+    'model__optimizer': ['adam'],      # Note the prefix "model__"
+    'model__lstm_neurons': [100, 500],         # Note the prefix "model__"
     'model__recurrent_dropout' : [0.0, 0.1, 0.2],   # Note the prefix "model__"
     'model__kernel_regularizer' : [regularizers.l2(0.0),  regularizers.l2(0.01), regularizers.l2(0.02)],
     'batch_size': [1,4,8],
-    'epochs': [100,200,500]
+    'epochs': [500]
+}
+
+param_grid2 = {
+    'model__optimizer': ['adam'],      # Note the prefix "model__"
+    'model__lstm_neurons': [500, 1000],         # Note the prefix "model__"
+    'model__recurrent_dropout' : [0.1, 0.2, 0.3],   # Note the prefix "model__"
+    'model__kernel_regularizer' : [regularizers.l2(0.03),  regularizers.l2(0.01), regularizers.l2(0.02)],
+    'batch_size': [1,4,8],
+    'epochs': [1000]
 }
 
 # GridSearchCV
 tscv = TimeSeriesSplit(n_splits=3)
 
-grid = GridSearchCV(estimator=model, param_grid=param_grid, scoring='neg_mean_squared_error', cv=tscv, verbose=2, n_jobs= -1)
-grid_result = grid.fit(X, y)
+grid = GridSearchCV(estimator=model, param_grid=param_grid2, scoring='neg_mean_squared_error', cv=tscv, verbose=2, n_jobs= -1)
+grid_result = grid.fit(X, y,shuffle = False)
+
 # Display the best hyperparameters
 print("Best: %f using %s" % (grid_result.best_score_, grid_result.best_params_))
 
+# define model
+model = grid_result.best_estimator_
+history = model.fit(X, y, epochs=grid_result.best_params_['epochs'], verbose=2, shuffle = False, grid_result.best_params_['batch_size'], metrics=['mape', 'mae'])
 
-
-plt.plot(history.history['mse'])
-plt.plot(history.history['mae'])
-plt.plot(history.history['mape'])
+plt.plot(history.history_['mse'])
+plt.plot(history.history_['mean_absolute_percentage_error'])
+plt.plot(history.history_['mape'])
 plt.title('Model loss (mse), mae and mape for training data set')
 plt.ylabel('mse')
 plt.xlabel('Training epoch')
