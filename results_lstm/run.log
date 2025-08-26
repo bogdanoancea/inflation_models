@@ -1,0 +1,11 @@
+2025-08-26 15:55:59,695 INFO: Starting run with args: {'data': PosixPath('/Users/bogdanoancea/OneDrive/papers/2025/PEP/inflatie-bnr-ro.xlsx'), 'sheet': 0, 'model': 'lstm', 'timesteps': 7, 'outdir': PosixPath('results'), 'train_start': '2006:Q1', 'train_end': '2022:Q4', 'test_start': '2021:Q3', 'max_workers_cap': 24, 'seed': 12345, 'epochs': 1000, 'verbose': False, 'multivariate': False}
+2025-08-26 15:56:00,192 WARNING: The PostScript backend does not support transparency; partially transparent artists will be rendered opaque.
+2025-08-26 15:56:00,197 INFO: Saved series plot to results_lstm/HICP.eps
+2025-08-26 15:56:00,262 WARNING: The PostScript backend does not support transparency; partially transparent artists will be rendered opaque.
+2025-08-26 15:56:00,266 INFO: Saved train  / test series plot to results_lstm/HICP_train_test.eps
+2025-08-26 15:56:00,266 INFO: Saved prediction plot to results_lstm/HICP_train_test.eps
+2025-08-26 15:56:00,266 INFO: Starting experiment 'univariate' with features=['HICP'] (target_idx=0) using model=lstm
+2025-08-26 15:56:00,267 INFO: [univariate] Raw shapes: train=(68, 1) test=(10, 1)
+2025-08-26 15:56:00,268 INFO: [univariate] Window shapes: X_train=(62, 6, 1) y_train=(62, 1) X_test=(4, 6, 1) y_test=(4, 1)
+2025-08-26 15:56:00,274 INFO: [univariate] Running LSTM cross-validated grid search (parallel over param combos)
+2025-08-26 15:56:00,279 INFO: [univariate] Parameter grid sampled: 2000/8748 combinations

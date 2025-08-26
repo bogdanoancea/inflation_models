@@ -598,11 +598,7 @@ def run_experiment(
 
             # Shorter patience; stop early across CV
             cb = [
-<<<<<<< HEAD
-                keras.callbacks.EarlyStopping(monitor='val_loss', patience=6, restore_best_weights=True, verbose=0),
-=======
                 keras.callbacks.EarlyStopping(monitor='loss', patience=10, restore_best_weights=True, verbose=0),
->>>>>>> 332e71b (romania, quarterly)
                 keras.callbacks.TerminateOnNaN(),
             ]
 
@@ -694,34 +690,19 @@ def run_experiment(
         #     keras.callbacks.TerminateOnNaN(),
         # ]
         early_final = keras.callbacks.EarlyStopping(
-<<<<<<< HEAD
-            monitor="val_loss", patience=8, restore_best_weights=True
-        )
-        bs = int(best_params['batch_size'])
-        ds_full = _make_dataset(X_all_s, y_all_s, bs, training=True)
-        save_json_excel(best_params, prefix / "lstm_best_params")
-=======
             monitor="loss", patience=10, restore_best_weights=True
         )
         bs = int(best_params['batch_size'])
         ds_full = _make_dataset(X_all_s, y_all_s, bs, training=True)
         save_json_excel(best_params, prefix / "lstm_best_params.json")
->>>>>>> 332e71b (romania, quarterly)
         hist = final_model.fit(ds_full, epochs=1000,
                         verbose=1 if getattr(args, 'verbose', False) else 0,
                         callbacks=early_final)
 
         epochs_run = len(hist.epoch)  # real number of epochs executed in this fit
-<<<<<<< HEAD
-        monitor = getattr(early_final, "monitor", "val_loss") if monitor in hist.history else (
-            "val_loss" if "val_loss" in hist.history else "loss"
-        )
-=======
         monitor = getattr(early_final, "monitor", "loss")
         if monitor not in hist.history:
             monitor = "loss"
-
->>>>>>> 332e71b (romania, quarterly)
         best_epoch = int(np.argmin(hist.history[monitor])) + 1
         best_value = float(np.min(hist.history[monitor]))
         stopped_epoch = getattr(early_final, "stopped_epoch", 0)  # >0 if early stopping triggered
@@ -733,11 +714,8 @@ def run_experiment(
             "early_stopped": bool(stopped_epoch > 0),
             "stopped_epoch": int(stopped_epoch),
         }
-<<<<<<< HEAD
-        save_json_excel(summary, prefix / "lstm_epochs" )
-=======
+
         save_json_excel(summary, prefix / "lstm_epochs.json" )
->>>>>>> 332e71b (romania, quarterly)
         print(f"Ran {epochs_run} epochs; best @ epoch {best_epoch} ({monitor}={best_value:.6f}); "
               f"early_stopped={'yes' if stopped_epoch > 0 else 'no'}")
 
@@ -778,11 +756,8 @@ def run_experiment(
         else:
             metrics.update({'test_MAPE': None, 'test_MSE': None, 'test_MAE': None})
 
-<<<<<<< HEAD
-        save_json_excel(metrics, prefix / "lstm_metrics")
-=======
+
         save_json_excel(metrics, prefix / "lstm_metrics.json")
->>>>>>> 332e71b (romania, quarterly)
         logging.info("[%s] LSTM CV experiment done. Best params: %s. Metrics: %s", experiment_name, best_params, metrics)
         return metrics
 
