@@ -1,0 +1,13 @@
+# Ignore everything by default
+*
+
+# But do not ignore directories — we need directories present in order
+# to be able to un-ignore python files inside them.
+!*/
+
+# Un-ignore Python files anywhere
+!*.py
+!**/*.py
+
+# Keep the .gitignore file itself tracked
+!.gitignore
