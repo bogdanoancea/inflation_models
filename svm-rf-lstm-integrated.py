@@ -29,7 +29,7 @@ import random
 import sys
 from pathlib import Path
 from typing import Tuple, Optional, List, Any
-
+import ast
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -60,7 +60,7 @@ except Exception:
     TF_AVAILABLE = False
 
 PARAM_GRIDS = {
-    'svr_grid': {
+    'svr': {
         'regressor__est__C': [0.1, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         'regressor__est__gamma': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         'regressor__est__coef0': [0.0, 0.01, 0.5, 1.0, 2.0, 2.5],
@@ -68,7 +68,7 @@ PARAM_GRIDS = {
         'regressor__est__kernel': ['rbf', 'poly'],
         'regressor__est__degree': [1, 2, 3, 4, 5]
     },
-    'rf_grid': {
+    'rf': {
         'regressor__est__n_estimators': [50, 75, 100, 150, 200],
         'regressor__est__max_depth': [None, 2, 5, 10, 20, 30, 40, 50],
         'regressor__est__min_samples_split': [2, 5, 10, 12, 15, 20],
@@ -76,7 +76,20 @@ PARAM_GRIDS = {
     }
 }
 
+countries = {
+    'BG_CPI': 'Bulgaria',
+    'RO_CPI': 'Romania',
+    'SK_CPI': 'Slovakia',
+    'SL_CPI': 'Slovenia',
+    'LT_CPI': 'Lithuania',
+    'LV_CPI': 'Latvia',
+    'ES_CPI': 'Estonia',
+    'PL_CPI': 'Poland',
+    'HU_CPI': 'Hungary',
+    'CZ_CPI': 'Czechia'
+}
 
+GRID_SAMPLE_SIZE = 2000
 def set_seeds(seed: int = 12345):
     random.seed(seed)
     np.random.seed(seed)
@@ -88,7 +101,7 @@ def set_seeds(seed: int = 12345):
 
 
 # ---- Utility: parallel configuration function (copied/adapted) ----
-def configure_parallelism(max_workers_cap: int = 8,
+def configure_parallelism(max_workers_cap: int = 24,
                           prefer_physical: bool = True,
                           seed: int = 12345,
                           verbose: bool = True) -> Tuple[int, int]:
@@ -152,22 +165,25 @@ def configure_parallelism(max_workers_cap: int = 8,
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train SVR, RF or LSTM on HICP series (quarterly).")
+    parser = argparse.ArgumentParser(description="Train SVR, RF or LSTM on HICP series (quarterly/monthly).")
     parser.add_argument("--data", required=True, type=Path, help="Path to Excel input file")
     parser.add_argument("--sheet", type=str, default=0, help="Sheet name or index for Excel read")
     parser.add_argument("--model", choices=("svr", "rf", "lstm"), default="svr",
                         help="Model to run: 'svr', 'rf', or 'lstm'")
     parser.add_argument("--timesteps", type=int, default=7, help="Number of timesteps (window length)")
     parser.add_argument("--outdir", type=Path, default=Path("results"), help="Output directory")
-    parser.add_argument("--train-start", type=str, default="2006:Q1", help="Train start (e.g. 2006:Q1)")
-    parser.add_argument("--train-end", type=str, default="2022:Q4", help="Train end (e.g. 2022:Q4)")
-    parser.add_argument("--test-start", type=str, default="2021:Q3", help="Test start (e.g. 2021:Q3)")
+    parser.add_argument("--train-start", required=True, type=str, default="2006:Q1", help="Train start (e.g. 2006:Q1)")
+    parser.add_argument("--train-end", required=True, type=str, default="2022:Q4", help="Train end (e.g. 2022:Q4)")
+    parser.add_argument("--test-start", required=True, type=str, default="2021:Q3", help="Test start (e.g. 2021:Q3)")
     parser.add_argument("--max-workers-cap", type=int, default=24, help="Cap for parallel workers")
     parser.add_argument("--seed", type=int, default=12345, help="RNG seed")
     parser.add_argument("--epochs", type=int, default=1000, help="LSTM training epochs")
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
-    parser.add_argument("--multivariate", action="store_true", help="Run multivariate experiment")
+    parser.add_argument("--multicountry", action="store_true", help="Run multicountry experiment")
+    parser.add_argument("--experiment_name", required=True, type=str, help="Experiment name")
+    parser.add_argument("--features", required=True, type=str, help="List of features")
     return parser.parse_args(argv)
+
 
 
 def setup_logging(outdir: Path, verbose: bool = False) -> None:
@@ -203,6 +219,48 @@ def read_and_prepare(df_path: Path) -> pd.DataFrame:
     ts = ts.loc[:, present].copy()
     ts.set_index('Quarter', inplace=True)
     return ts
+
+
+def read_and_prepare_multicountry_data(df_path: Path) -> pd.DataFrame:
+    """Read Excel and prepare the time series DataFrame."""
+    df = pd.read_excel(df_path)
+    df.rename(columns={'month': 'Month',
+    #                     'esi_bulgaria': 'BG_ESI',
+    #                     'esi_romania': 'RO_ESI',
+    #                     'esi_slovakia': 'SK_ESI',
+    #                     'esi_slovenia': 'SL_ESI',
+    #                     'esi_lithuania': 'LT_ESI',
+    #                     'esi_latvia': 'LV_ESI',
+    #                     'esi_estonia': 'ES_ESI',
+    #                     'esi_poland': 'PL_ESI',
+    #                     'esi_hungary': 'HU_ESI',
+    #                     'esi_czechia': 'CZ_ESI',
+    #                     'cpi_bulgaria': 'BG_CPI',
+    #                     'cpi_romania': 'RO_CPI',
+    #                     'cpi_slovakia': 'SK_CPI',
+    #                     'cpi_slovenia': 'SL_CPI',
+    #                     'cpi_lithuania': 'LT_CPI',
+    #                     'cpi_latvia': 'LV_CPI',
+    #                     'cpi_estonia': 'ES_CPI',
+    #                     'cpi_poland': 'PL_CPI',
+    #                     'cpi_hungary': 'HU_CPI',
+    #                     'cpi_czechia': 'CZ_CPI',
+    #                     'unempl_bulgaria': 'BG_UNEMPL',
+    #                     'unempl_romania': 'RO_UNEMPL',
+    #                     'unempl_slovakia': 'SK_UNEMPL',
+    #                     'unempl_slovenia': 'SL_UNEMPL',
+    #                     'unempl_lithuania': 'LT_UNEMPL',
+    #                     'unempl_latvia': 'LV_UNEMPL',
+    #                     'unempl_estonia': 'ES_UNEMPL',
+    #                     'unempl_poland': 'PL_UNEMPL',
+    #                     'unempl_hungary': 'HU_UNEMPL',
+    #                     'unempl_czechia': 'CZ_UNEMPL',
+                        }, inplace=True)
+
+    ts = df.copy()
+    ts.set_index('Month', inplace=True)
+    return ts
+
 
 
 def create_supervised(arr: np.ndarray, timesteps: int) -> Tuple[np.ndarray, np.ndarray]:
@@ -327,7 +385,42 @@ def build_lstm(input_shape: Tuple[int, int],
     model.compile(optimizer=opt, loss='mse', metrics=[keras.metrics.MeanAbsoluteError()])
     return model
 
-
+def run_multi_country_experiment(
+        experiment_name: str,
+        features: str,
+        target_col_idx: int,
+        ts: pd.DataFrame,
+        train_start: str,
+        train_end: str,
+        test_start: str,
+        args,
+        out_dir: Path,
+        n_jobs: int,
+        threads_per_worker: int,
+        tscv: TimeSeriesSplit,
+):
+    for col, country in countries.items():
+        logging.info("Starting multicountry experiment '%s' with features=%s (target_idx=%d) using model=%s, for country %s",
+                     experiment_name, features, target_col_idx, args.model, country)
+        new_name = f"{experiment_name}_{country}"
+        new_features=[f + f'_{country}' for f in ast.literal_eval(features)]
+        new_features = list(map(str.lower, new_features))
+        print("new features are:")
+        print(new_features)
+        run_experiment(
+            experiment_name=new_name,
+            features=new_features,
+            target_col_idx=0,
+            ts=ts,
+            train_start=train_start,
+            train_end=train_end,
+            test_start=test_start,
+            args=args,
+            out_dir=out_dir,
+            n_jobs=n_jobs,
+            threads_per_worker=threads_per_worker,
+            tscv=tscv
+        )
 def run_experiment(
         experiment_name: str,
         features: list,
@@ -340,7 +433,7 @@ def run_experiment(
         out_dir: Path,
         n_jobs: int,
         threads_per_worker: int,
-        tscv: TimeSeriesSplit
+        tscv: TimeSeriesSplit,
 ):
     """Unified experiment runner that supports 'svr', 'rf' and 'lstm'.
 
@@ -350,7 +443,10 @@ def run_experiment(
     logging.info("Starting experiment '%s' with features=%s (target_idx=%d) using model=%s",
                  experiment_name, features, target_col_idx, args.model)
 
+
+
     # Prepare train/test DataFrames
+    features = list(features)
     train_df = ts.loc[(ts.index >= train_start) & (ts.index <= train_end), features].copy().dropna()
     test_df = ts.loc[(ts.index >= test_start), features].copy().dropna()
     logging.info("[%s] Raw shapes: train=%s test=%s", experiment_name, train_df.shape, test_df.shape)
@@ -440,7 +536,7 @@ def run_experiment(
             with threadpool_limits(limits=threads_per_worker):
                 try:
                     grid = GridSearchCV(regressor, param_grid, cv=tscv,
-                                        scoring='neg_mean_squared_error', n_jobs=4,
+                                        scoring='neg_mean_squared_error', n_jobs=n_jobs,
                                         pre_dispatch='n_jobs', refit=True, verbose=1)
                     grid.fit(X_train_raw, y_train_raw.ravel())
                 except Exception as e:
@@ -448,6 +544,7 @@ def run_experiment(
                     raise
 
         logging.info("[%s] GridSearch best params: %s", experiment_name, grid.best_params_)
+        save_json_excel(grid.best_params_, prefix / f"{args.model}_best_params.json")
         joblib.dump(grid.best_estimator_, prefix / f"{args.model}_{experiment_name}.pkl")
 
         # Predictions & metrics
@@ -500,18 +597,18 @@ def run_experiment(
 
         # grid (leaner, sensible defaults)
         grid_space = {
-            'units': [64, 128, 256],  # smaller but efficient
+            'units': [128, 256, 512],  # smaller but efficient
             'dropout1': [0.0, 0.1, 0.2],  # keep only input dropout
             'recurrent_dropout1': [0.0, 0.1, 0.2],
             'dropout2': [0.0, 0.1, 0.2],  # usually redundant for 1-layer LSTM
             'recurrent_dropout2': [0.0, 0.1, 0.2],
             'l2_reg': [0.0, 1e-4, 1e-3],
             'lr': [3e-4, 1e-3, 3e-3],  # log-ish grid; avoid 1e-1
-            'batch_size': [1, 16, 32, 64],  # larger batches
+            'batch_size': [1, 8, 16],  # larger batches
         }
         param_list_full = list(ParameterGrid(grid_space))
         # Randomly sample K candidates instead of full cartesian product
-        max_candidates = min(2000, len(param_list_full))  # tune as you like
+        max_candidates = min(GRID_SAMPLE_SIZE, len(param_list_full))  # tune as you like
         rng = np.random.default_rng(seed=args.seed or 0)
         param_list_idx = rng.choice(len(param_list_full), size=max_candidates, replace=False)
         param_list = [param_list_full[i] for i in param_list_idx]
@@ -598,7 +695,7 @@ def run_experiment(
 
             # Shorter patience; stop early across CV
             cb = [
-                keras.callbacks.EarlyStopping(monitor='loss', patience=10, restore_best_weights=True, verbose=0),
+                keras.callbacks.EarlyStopping(monitor='loss', patience=25, start_from_epoch = 100, restore_best_weights=True, verbose=1),
                 keras.callbacks.TerminateOnNaN(),
             ]
 
@@ -690,7 +787,7 @@ def run_experiment(
         #     keras.callbacks.TerminateOnNaN(),
         # ]
         early_final = keras.callbacks.EarlyStopping(
-            monitor="loss", patience=10, restore_best_weights=True
+            monitor="loss", patience=25, start_from_epoch = 100, restore_best_weights=True, verbose = 1
         )
         bs = int(best_params['batch_size'])
         ds_full = _make_dataset(X_all_s, y_all_s, bs, training=True)
@@ -884,15 +981,23 @@ def main(argv: Optional[List[str]] = None) -> None:
                                                        seed=args.seed,
                                                        verbose=args.verbose)
 
-    ts = read_and_prepare(args.data)
+    if args.multicountry :
+        ts = read_and_prepare_multicountry_data(args.data)
+    else :
+        ts = read_and_prepare(args.data)
 
-    if 'HICP' not in ts.columns:
-        logging.error("HICP column not found after preprocessing. Available columns: %s", ts.columns.tolist())
-        raise SystemExit(1)
+
+    # if 'HICP' not in ts.columns:
+    #     if not any(col in ts.columns for col, _ in countries.items()):
+    #         logging.error("Neither 'HICP' nor any country-specific columns (%s) found. Available: %s",
+    #                       list(countries.keys()), ts.columns.tolist())
+    #         raise SystemExit(1)
 
     # quick plots
-    plot_hicp_series(ts, out_dir, 12, 4)
-    plot_hicp_train_test_series(ts, args.train_start, args.train_end, out_dir, 12, 4)
+    if not args.multicountry:
+        plot_hicp_series(ts, out_dir, 12, 4)
+        plot_hicp_train_test_series(ts, args.train_start, args.train_end, out_dir, 12, 4)
+
 
     train_start = args.train_start
     train_end = args.train_end
@@ -900,72 +1005,116 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     # CV
     tscv = TimeSeriesSplit(n_splits=3)
-
+    if not args.multicountry:
+        run_experiment(
+            experiment_name=args.experiment_name,
+            features=args.features,
+            target_col_idx=0,
+            ts=ts,
+            train_start=train_start,
+            train_end=train_end,
+            test_start=test_start,
+            args=args,
+            out_dir=out_dir,
+            n_jobs=n_jobs,
+            threads_per_worker=threads_per_worker,
+            tscv=tscv
+        )
+    else :
+        run_multi_country_experiment(
+            experiment_name=args.experiment_name,
+            features=args.features,
+            target_col_idx=0,
+            ts=ts,
+            train_start=train_start,
+            train_end=train_end,
+            test_start=test_start,
+            args=args,
+            out_dir=out_dir,
+            n_jobs=n_jobs,
+            threads_per_worker=threads_per_worker,
+            tscv=tscv
+        )
     # Run univariate experiment
-    run_experiment(
-        experiment_name="univariate",
-        features=['HICP'],
-        target_col_idx=0,
-        ts=ts,
-        train_start=train_start,
-        train_end=train_end,
-        test_start=test_start,
-        args=args,
-        out_dir=out_dir,
-        n_jobs=n_jobs,
-        threads_per_worker=threads_per_worker,
-        tscv=tscv
-    )
-    keras.backend.clear_session()
-    gc.collect()
+    # run_experiment(
+    #     experiment_name="univariate",
+    #     features=['HICP'],
+    #     target_col_idx=0,
+    #     ts=ts,
+    #     train_start=train_start,
+    #     train_end=train_end,
+    #     test_start=test_start,
+    #     args=args,
+    #     out_dir=out_dir,
+    #     n_jobs=n_jobs,
+    #     threads_per_worker=threads_per_worker,
+    #     tscv=tscv
+    # )
+    # keras.backend.clear_session()
+    # gc.collect()
+    #
+    # run_experiment(
+    #     experiment_name="multivariate",
+    #     features=['HICP', 'Sentiment', 'Unemployment'],
+    #     target_col_idx=0,
+    #     ts=ts,
+    #     train_start=train_start,
+    #     train_end=train_end,
+    #     test_start=test_start,
+    #     args=args,
+    #     out_dir=out_dir,
+    #     n_jobs=n_jobs,
+    #     threads_per_worker=threads_per_worker,
+    #     tscv=tscv
+    # )
+    # keras.backend.clear_session()
+    # gc.collect()
+    #
+    # run_experiment(
+    #     experiment_name="multivariateHS",
+    #     features=['HICP', 'Sentiment'],
+    #     target_col_idx=0,
+    #     ts=ts,
+    #     train_start=train_start,
+    #     train_end=train_end,
+    #     test_start=test_start,
+    #     args=args,
+    #     out_dir=out_dir,
+    #     n_jobs=n_jobs,
+    #     threads_per_worker=threads_per_worker,
+    #     tscv=tscv
+    # )
+    # keras.backend.clear_session()
+    # gc.collect()
+    # run_experiment(
+    #     experiment_name="multivariateHU",
+    #     features=['HICP', 'Unemployment'],
+    #     target_col_idx=0,
+    #     ts=ts,
+    #     train_start=train_start,
+    #     train_end=train_end,
+    #     test_start=test_start,
+    #     args=args,
+    #     out_dir=out_dir,
+    #     n_jobs=n_jobs,
+    #     threads_per_worker=threads_per_worker,
+    #     tscv=tscv
+    # )
 
-    run_experiment(
-        experiment_name="multivariate",
-        features=['HICP', 'Sentiment', 'Unemployment'],
-        target_col_idx=0,
-        ts=ts,
-        train_start=train_start,
-        train_end=train_end,
-        test_start=test_start,
-        args=args,
-        out_dir=out_dir,
-        n_jobs=n_jobs,
-        threads_per_worker=threads_per_worker,
-        tscv=tscv
-    )
-    keras.backend.clear_session()
-    gc.collect()
-
-    run_experiment(
-        experiment_name="multivariateHS",
-        features=['HICP', 'Sentiment'],
-        target_col_idx=0,
-        ts=ts,
-        train_start=train_start,
-        train_end=train_end,
-        test_start=test_start,
-        args=args,
-        out_dir=out_dir,
-        n_jobs=n_jobs,
-        threads_per_worker=threads_per_worker,
-        tscv=tscv
-    )
-    keras.backend.clear_session()
-    gc.collect()
-    run_experiment(
-        experiment_name="multivariateHU",
-        features=['HICP', 'Unemployment'],
-        target_col_idx=0,
-        ts=ts,
-        train_start=train_start,
-        train_end=train_end,
-        test_start=test_start,
-        args=args,
-        out_dir=out_dir,
-        n_jobs=n_jobs,
-        threads_per_worker=threads_per_worker,
-        tscv=tscv
-    )
+    # run_multi_country_experiment(
+    #     experiment_name="univariate",
+    #     features=['CPI'],
+    #     target_col_idx=0,
+    #     ts=ts,
+    #     train_start=train_start,
+    #     train_end=train_end,
+    #     test_start=test_start,
+    #     args=args,
+    #     out_dir=out_dir,
+    #     n_jobs=n_jobs,
+    #     threads_per_worker=threads_per_worker,
+    #     tscv=tscv
+    # )
     logging.info("Script finished.")
 
 
@@ -973,3 +1122,42 @@ if __name__ == "__main__":
     import multiprocessing as mp
     mp.set_start_method("spawn", force=True)
     main()
+
+
+# Define train/test split for multicountry data
+# train_start = '2006-01'
+# train_end = '2024-12'
+# test_start = '2024-07'
+
+# Define train/test split for RO data
+#train-start="2006:Q1"
+#train-end="2022:Q4"
+#test-start="2021:Q3"
+
+# command lines multicountry
+# python --data=dateCEE-hicp.xlsx --model=svr --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI'] --experiment_name=univariate
+# python --data=dateCEE-hicp.xlsx --model=svr --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI', 'ESI'] --experiment_name=multivaritateCPI_ESI
+# python --data=dateCEE-hicp.xlsx --model=svr --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI', 'UNEMPL'] --experiment_name=multivaritateCPI_UNEMPL
+# python --data=dateCEE-hicp.xlsx --model=svr --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI', 'ESI', 'UNEMPL'] --experiment_name=multivaritateCPI_ESI_UNEMPL
+# python --data=dateCEE-hicp.xlsx --model=rf --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI'] --experiment_name=univariate
+# python --data=dateCEE-hicp.xlsx --model=rf --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI', 'ESI'] -experiment_name=multivaritateCPI_ESI
+# python --data=dateCEE-hicp.xlsx --model=rf --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI', 'UNEMPL'] -experiment_name=multivaritateCPI_UNEMPL
+# python --data=dateCEE-hicp.xlsx --model=rf --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI', 'ESI', 'UNEMPL'] --experiment_name=multivaritateCPI_ESI_UNEMPL
+# python --data=dateCEE-hicp.xlsx --model=lstm --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI'] --experiment_name=univariate
+# python --data=dateCEE-hicp.xlsx --model=lstm --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI', 'ESI'] --experiment_name=multivaritateCPI_ESI
+# python --data=dateCEE-hicp.xlsx --model=lstm --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI', 'UNEMPL'] --experiment_name=multivaritateCPI_UNEMPL
+# python --data=dateCEE-hicp.xlsx --model=lstm --train-start=2006-01 --train-end=2024-12 --test-start=2024-07 --multicountry -features=['CPI', 'ESI', 'UNEMPL'] --experiment_name=multivaritateCPI_ESI_UNEMPL
+
+# command lines RO ['HICP', 'Sentiment', 'Unemployment'],
+# python --data=inflatie-bnr-ro.xlsx --model=svr --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3  -features=['HICP'] --experiment_name=ROunivariate
+# python --data=inflatie-bnr-ro.xlsx --model=svr --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3  -features=['HICP', 'Sentiment'] --experiment_name=ROmultivaritateCPI_ESI
+# python --data=inflatie-bnr-ro.xlsx --model=svr --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3  -features=['HICP', 'Unemployment'] --experiment_name=ROmultivaritateCPI_UNEMPL
+# python --data=inflatie-bnr-ro.xlsx --model=svr --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3  -features=['HICP', 'Sentiment', 'Unemployment'] --experiment_name=ROmultivaritateCPI_ESI_UNEMPL
+# python --data=inflatie-bnr-ro.xlsx --model=rf --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3  -features=['HICP'] --experiment_name=ROunivariate
+# python --data=inflatie-bnr-ro.xlsx --model=rf --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3  -features=['HICP', 'Sentiment'] -experiment_name=ROmultivaritateCPI_ESI
+# python --data=inflatie-bnr-ro.xlsx --model=rf --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3  -features=['HICP', 'Unemployment'] -experiment_name=ROmultivaritateCPI_UNEMPL
+# python --data=inflatie-bnr-ro.xlsx --model=rf --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3  -features=['HICP', 'Sentiment', 'Unemployment'] --experiment_name=ROmultivaritateCPI_ESI_UNEMPL
+# python --data=inflatie-bnr-ro.xlsx --model=lstm --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3 -features=['HICP'] --experiment_name=ROunivariate
+# python --data=inflatie-bnr-ro.xlsx --model=lstm --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3 -features=['HICP', 'Sentiment'] --experiment_name=ROmultivaritateCPI_ESI
+# python --data=inflatie-bnr-ro.xlsx --model=lstm --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3 -features=['HICP', 'Unemployment'] --experiment_name=ROmultivaritateCPI_UNEMPL
+# python --data=inflatie-bnr-ro.xlsx --model=lstm --train-start=2006:Q1 --train-end=2022:Q4 --test-start=2021:Q3 -features=['HICP', 'Sentiment', 'Unemployment'] --experiment_name=ROmultivaritateCPI_ESI_UNEMPL
