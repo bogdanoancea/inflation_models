@@ -423,7 +423,7 @@ def run_multi_country_experiment(
         )
 def run_experiment(
         experiment_name: str,
-        features: list,
+        features: str,
         target_col_idx: int,
         ts: pd.DataFrame,
         train_start: str,
@@ -446,7 +446,11 @@ def run_experiment(
 
 
     # Prepare train/test DataFrames
-    features = list(features)
+    new_features = [f for f in ast.literal_eval(features)]
+    new_features = list(new_features)
+    features = new_features
+    print("new features are:")
+    print(new_features)
     train_df = ts.loc[(ts.index >= train_start) & (ts.index <= train_end), features].copy().dropna()
     test_df = ts.loc[(ts.index >= test_start), features].copy().dropna()
     logging.info("[%s] Raw shapes: train=%s test=%s", experiment_name, train_df.shape, test_df.shape)
@@ -489,7 +493,7 @@ def run_experiment(
         f"{experiment_name}_y_test_hash": _hash(y_test_raw),
         "numpy_version": np.__version__,
         "sklearn_version": sklearn.__version__
-    }, out_dir / f"input_hashes_{experiment_name}")
+    }, out_dir / f"input_hashes_{experiment_name}.json")
 
     prefix = out_dir / f"{args.model}_{experiment_name}"
     prefix.mkdir(parents=True, exist_ok=True)
@@ -538,7 +542,7 @@ def run_experiment(
                     grid = GridSearchCV(regressor, param_grid, cv=tscv,
                                         scoring='neg_mean_squared_error', n_jobs=n_jobs,
                                         pre_dispatch='n_jobs', refit=True, verbose=1)
-                    grid.fit(X_train_raw, y_train_raw.ravel())
+                    grid.fit(X_train_raw, y_train_raw)
                 except Exception as e:
                     logging.exception("[%s] GridSearchCV failed: %s", experiment_name, e)
                     raise
@@ -705,7 +709,7 @@ def run_experiment(
                     validation_data=ds_val,
                     epochs=min(getattr(args, 'epochs', 700), 500),  # tighter cap during CV
                     verbose=0 if not getattr(args, 'verbose', False) else 2,
-                    callbacks=cb
+                    callbacks=cb, workers=0, use_multiprocessing=False
                 )
                 val_loss = float(np.min(hist.history.get('val_loss', [np.inf])))
             except Exception:
@@ -794,7 +798,7 @@ def run_experiment(
         save_json_excel(best_params, prefix / "lstm_best_params.json")
         hist = final_model.fit(ds_full, epochs=1000,
                         verbose=1 if getattr(args, 'verbose', False) else 0,
-                        callbacks=early_final)
+                        callbacks=early_final,workers=0,use_multiprocessing=False)
 
         epochs_run = len(hist.epoch)  # real number of epochs executed in this fit
         monitor = getattr(early_final, "monitor", "loss")
