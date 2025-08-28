@@ -446,11 +446,12 @@ def run_experiment(
 
 
     # Prepare train/test DataFrames
-    new_features = [f for f in ast.literal_eval(features)]
-    new_features = list(new_features)
-    features = new_features
+    if not args.multicountry:
+        new_features = [f for f in ast.literal_eval(features)]
+        new_features = list(new_features)
+        features = new_features
     print("new features are:")
-    print(new_features)
+    print(features)
     train_df = ts.loc[(ts.index >= train_start) & (ts.index <= train_end), features].copy().dropna()
     test_df = ts.loc[(ts.index >= test_start), features].copy().dropna()
     logging.info("[%s] Raw shapes: train=%s test=%s", experiment_name, train_df.shape, test_df.shape)
@@ -654,8 +655,8 @@ def run_experiment(
 
         def _make_dataset(X, y, batch_size, training=True):
             ds = tf.data.Dataset.from_tensor_slices((X, y))
-            if training:
-                ds = ds.shuffle(min(len(X), 4096), seed=args.seed or 0, reshuffle_each_iteration=True)
+            #if training:
+            #   ds = ds.shuffle(min(len(X), 4096), seed=args.seed or 0, reshuffle_each_iteration=True)
             ds = ds.batch(batch_size, drop_remainder=False)
             ds = ds.cache().prefetch(tf.data.AUTOTUNE)
             return ds
@@ -709,7 +710,7 @@ def run_experiment(
                     validation_data=ds_val,
                     epochs=min(getattr(args, 'epochs', 700), 500),  # tighter cap during CV
                     verbose=0 if not getattr(args, 'verbose', False) else 2,
-                    callbacks=cb, workers=0, use_multiprocessing=False
+                    callbacks=cb
                 )
                 val_loss = float(np.min(hist.history.get('val_loss', [np.inf])))
             except Exception:
@@ -798,7 +799,7 @@ def run_experiment(
         save_json_excel(best_params, prefix / "lstm_best_params.json")
         hist = final_model.fit(ds_full, epochs=1000,
                         verbose=1 if getattr(args, 'verbose', False) else 0,
-                        callbacks=early_final,workers=0,use_multiprocessing=False)
+                        callbacks=early_final)
 
         epochs_run = len(hist.epoch)  # real number of epochs executed in this fit
         monitor = getattr(early_final, "monitor", "loss")
