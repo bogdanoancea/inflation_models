@@ -700,7 +700,7 @@ def run_experiment(
 
             # Shorter patience; stop early across CV
             cb = [
-                keras.callbacks.EarlyStopping(monitor='loss', patience=25, start_from_epoch = 100, restore_best_weights=True, verbose=1),
+                keras.callbacks.EarlyStopping(monitor='loss', patience=8, start_from_epoch = 50, restore_best_weights=True, verbose=0),
                 keras.callbacks.TerminateOnNaN(),
             ]
 
@@ -792,7 +792,7 @@ def run_experiment(
         #     keras.callbacks.TerminateOnNaN(),
         # ]
         early_final = keras.callbacks.EarlyStopping(
-            monitor="loss", patience=25, start_from_epoch = 100, restore_best_weights=True, verbose = 1
+            monitor="loss", patience=25, start_from_epoch = 250, restore_best_weights=True, verbose = 0
         )
         bs = int(best_params['batch_size'])
         ds_full = _make_dataset(X_all_s, y_all_s, bs, training=True)

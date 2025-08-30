@@ -76,11 +76,11 @@ model = KerasRegressor(model=create_model, shuffle=False, verbose=2)
 # Hyperparameters to be optimized
 param_grid = {
     'model__optimizer': ['adam'],      # Note the prefix "model__"
-    'model__lstm_neurons': [100, 500],         # Note the prefix "model__"
+    'model__lstm_neurons': [100, 500, 1000],         # Note the prefix "model__"
     'model__recurrent_dropout' : [0.0, 0.1, 0.2],   # Note the prefix "model__"
     'model__kernel_regularizer' : [regularizers.l2(0.0),  regularizers.l2(0.01), regularizers.l2(0.02)],
     'batch_size': [1,4,8],
-    'epochs': [500]
+    'epochs': [500, 700, 1000]
 }
 
 param_grid2 = {
